@@ -63,7 +63,18 @@ Deno.serve(async request => {
         {role:'user',content:JSON.stringify({name,comment})}
       ]})
     });
-    if (!moderation.ok) return reply(503, {error:'ИИ-проверка сейчас недоступна. Отзыв не опубликован.'});
+    if (!moderation.ok) {
+      // Log status only: never log keys, submitted reviews or provider response bodies.
+      console.error('Groq moderation HTTP status:', moderation.status);
+      const messages: Record<number, string> = {
+        400: 'Сервис проверки требует обновления настроек. Отзыв не опубликован.',
+        401: 'Ключ сервиса проверки не принят. Отзыв не опубликован.',
+        403: 'Сервис проверки отклонил доступ. Отзыв не опубликован.',
+        404: 'Модель проверки недоступна. Отзыв не опубликован.',
+        429: 'Достигнут лимит ИИ-проверки. Попробуй позже. Отзыв не опубликован.',
+      };
+      return reply(503, {error: messages[moderation.status] || 'ИИ-проверка сейчас недоступна. Отзыв не опубликован.'});
+    }
     const result = await moderation.json();
     let decision;
     try { decision = JSON.parse(result.choices?.[0]?.message?.content || ''); } catch { return reply(503,{error:'Не удалось проверить отзыв. Попробуй позже.'}); }
